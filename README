@@ -1,0 +1,74 @@
+open_bastion_host -- linux下简易开源的堡垒机，ssh使用体验不亚于专业堡垒机厂商
+
+支持ssh的方式的的服务器登录、权限控制、审计、回放等基本操作，满足一般需求
+
+clone代码后，需要进行简单的配置就可以使用了
+
+1、创建跳板机用户
+先创建tianbanji用户及tiaobanji组，只有跳板机组的用户ssh登录时才登录到非shell的跳板机程序
+useradd tiaobanji
+安全起见不允许tiaobanji用户登录系统
+usermod -s /sbin/nologin
+
+通过本项目自带的add_user.sh来创建跳板机用户
+
+
+2、设置跳板机用户登录后直接进入跳板机程序而非shell
+在/etc/profile文件最后追加如下内容
+# tail /etc/profile
+###add by laijingli for guide user who login  will run into tiaobanji,not login to bash shell
+#if [ $UID -ge 10000 ] && [ $UID -lt 10050 ];then
+id -nG|grep tiaobanji >/dev/null
+user_in_tiaobanji_group=$?
+if [ $user_in_tiaobanji_group = 0 ];then
+        shell_script_path=/backup/devops/devops/tiaobanji/tiaobanji.sh
+        log_file_name=/backup/log/$(whoami)_screen_tiaobanji_$(date +%Y%m%d%H%M%S)
+        exec /usr/bin/script -q -t -c "$shell_script_path" 2>$log_file_name.date  -a  -f $log_file_name.log
+fi
+
+使profile对当前shell生效
+source /etc/profile
+
+
+3、跳板机用户登录服务器,所有的操作对用户来说是透明的
+ssh laijingli@192.168.100.119
+
+
+4、审计
+直接查看log文件
+
+
+5、回放scriptreplay
+centos发行版默认只有script，而没有scriptreplay，需要安装一下scriptreplay：
+wget http://dxdown.onlinedown.net/down/util-linux-ng-2.17.2.tar.zip 
+unzip util-linux-ng-2.17.2.tar.zip 
+tar zxvf util-linux-ng-2.17.2.tar.gz 
+cd util-linux-ng-2.17.2 
+./configure && make (注意此处只是make，不install，install的话安装的工具集太多了，还会覆盖现有的一些命令) 
+cp misc-utils/scriptreplay /usr/bin/ 
+cd .. 
+rm -rf util-linux-ng-2.17.2*
+
+回放，
+格式scriptreplay time log 回放速率（大于1快进，小于1慢放，等于1正常播放）
+/usr/bin/scriptreplay /backup/log/laijingli_screen_tiaobanji_20151020173505.date /backup/log/laijingli_screen_tiaobanji_20151020173505.log  3
+
+
+6、更高级点的回放工具scriptreplay_ng  https://github.com/scoopex/scriptreplay_ng，支持暂停、即时快进、即时慢放、auditshell等。
+运行时报错，需要安装perl模块Term::ReadKey - A perl module for simple terminal control 
+[root@vm_test_yunniao_fabuji119 scriptreplay_ng]# ./scriptreplay
+Can't locate Term/ReadKey.pm in @INC (@INC contains: /usr/lib64/perl5/site_perl/5.8.8/x86_64-linux-thread-multi /usr/lib/perl5/site_perl/5.8.8 /usr/lib/perl5/site_perl /usr/lib64/perl5/vendor_perl/5.8.8/x86_64-linux-thread-multi /usr/lib/perl5/vendor_perl/5.8.8 /usr/lib/perl5/vendor_perl /usr/lib64/perl5/5.8.8/x86_64-linux-thread-multi /usr/lib/perl5/5.8.8 .) at ./scriptreplay line 19.
+BEGIN failed--compilation aborted at ./scriptreplay line 19.
+
+yum install perl-TermReadKey
+
+#回放，支持键盘控制暂停、即时快进、即时慢放、auditshell等
+/backup/scriptreplay_ng/scriptreplay  20151019224430_screen_tiaobanji_laijingli.date  20151019224430_screen_tiaobanji_laijingli.log
+
+
+7、加固跳板机
+比如修改ssh默认端口号
+对外只开放ssh服务
+只允许跳板机组里的用户登录跳板机
+跳板机ip段与业务ip段分离
+
